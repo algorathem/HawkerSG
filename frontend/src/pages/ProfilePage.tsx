@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Heart, Clock, Star, Search, MapPin } from 'lucide-react';
+// 🛑 CRITICAL FIX 1: Import Link from react-router-dom for internal navigation
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import StallCard from '../components/StallCard';
@@ -30,13 +32,14 @@ export default function ProfilePage() {
         <div className="flex items-center space-x-4">
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
             <span className="text-xl font-bold text-red-600">
-              {user.name.charAt(0).toUpperCase()}
+              {user.username.charAt(0).toUpperCase()} {/* Use username if 'name' isn't available */}
             </span>
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{user.name}</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{user.username}</h1> {/* Use username */}
             <p className="text-gray-600">{user.email}</p>
-            <p className="text-sm text-gray-500">Member since {new Date(user.createdAt).toLocaleDateString()}</p>
+            {/* Assuming user has a 'createdAt' field from sign up */}
+            <p className="text-sm text-gray-500">Member since {new Date(user.created_at).toLocaleDateString()}</p>
           </div>
         </div>
       </div>
@@ -48,13 +51,13 @@ export default function ProfilePage() {
           <div className="text-2xl font-bold text-gray-900">{favorites.length}</div>
           <div className="text-gray-600">Favorite Stalls</div>
         </div>
-        
+
         <div className="bg-white p-6 rounded-lg shadow-sm text-center">
           <Clock className="h-8 w-8 text-orange-600 mx-auto mb-3" />
           <div className="text-2xl font-bold text-gray-900">{recentlyVisited.length}</div>
           <div className="text-gray-600">Recently Visited</div>
         </div>
-        
+
         <div className="bg-white p-6 rounded-lg shadow-sm text-center">
           <Star className="h-8 w-8 text-yellow-600 mx-auto mb-3" />
           <div className="text-2xl font-bold text-gray-900">0</div>
@@ -110,12 +113,13 @@ export default function ProfilePage() {
               <Heart className="h-16 w-16 text-gray-400 mx-auto mb-4" />
               <h3 className="text-xl font-medium text-gray-900 mb-2">No Favorites Yet</h3>
               <p className="text-gray-600 mb-6">Start exploring hawker centers and save your favorite stalls</p>
-              <a
-                href="/search"
+              {/* 🛑 FIX 2: Replaced <a> with <Link> and href with to */}
+              <Link
+                to="/search"
                 className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
               >
                 Discover Stalls
-              </a>
+              </Link>
             </div>
           )}
         </div>
@@ -144,12 +148,13 @@ export default function ProfilePage() {
               <Clock className="h-16 w-16 text-gray-400 mx-auto mb-4" />
               <h3 className="text-xl font-medium text-gray-900 mb-2">No Recent Visits</h3>
               <p className="text-gray-600 mb-6">Visit some stalls to see them here</p>
-              <a
+              {/* 🛑 FIX 3: Replaced <a> with <Link> and to prop with to */}
+              <Link
                 to="/search"
                 className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
               >
                 Discover Stalls
-              </a>
+              </Link>
             </div>
           )}
         </div>
@@ -164,12 +169,13 @@ export default function ProfilePage() {
                     <Search className="h-4 w-4 text-gray-400" />
                     <span className="text-gray-900">{query}</span>
                   </div>
-                  <a
+                  {/* 🛑 FIX 4: Replaced <a> with <Link>, changed 'to' prop to the correct value */}
+                  <Link
                     to={`/search?q=${encodeURIComponent(query)}`}
                     className="text-red-600 hover:text-red-700 text-sm font-medium"
                   >
                     Search again
-                  </a>
+                  </Link>
                 </div>
               ))}
             </div>
