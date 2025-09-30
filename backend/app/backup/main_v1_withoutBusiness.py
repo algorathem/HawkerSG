@@ -1,17 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware 
 from app.database import Base, engine # Base and engine
-from app.routes.consumer_route import router as consumer_router # Import the consumer router
-from app.routes.business_route import router as business_router # Import the business router
-
+from app.routes.consumer_route import router as consumer_router # Import the router
 # Import models here so Base knows about them when calling create_all
-from app.models import (
-    user_model, 
-    consumer_model,
-    business_model,
-    operating_hour_model,
-    menu_item_model
-)
+from app.models import user_model, consumer_model 
 
 # Function to create tables
 def create_db_and_tables():
@@ -33,7 +25,6 @@ app.add_middleware(
 
 # Routes
 app.include_router(consumer_router)
-app.include_router(business_router)
 
 # Optional: Root route
 @app.get("/")
