@@ -61,41 +61,40 @@ def preview_stalls(stalls, limit=10):
         name = stall.get("Business Name") or stall.get("Licensee Name") or "(Unnamed stall)"
         print("-", name)
 
-def main():
-    query = input("Enter postal code or hawker centre name: ").strip()
 
-    # finding matching entries from index.json
+def run_query_pipeline(query: str, limit: int = 10):
+    """
+    Pipeline function: given a postal code or hawker centre name,
+    returns the entry + stalls and prints a preview.
+    """
     matches = find_entries(query)
 
-    # if no match, end
     if not matches:
         print("⚠️ No matches found.")
-        return
+        return None, []
 
-    # if multiple match
     if len(matches) > 1:
-        
-        # let user pick by number of refining
         entry = choose_match_interactively(matches)
-
-        # user enter q
         if entry is None:
             print("👋 Bye.")
-            return
-        
-        # once single entry is chosen, load the stalls
+            return None, []
         stalls = get_stalls_from_entry(entry)
-
-        # showing which hawker was chosen
         print(f"\n📍 {entry['hawker_centre']} ({entry['postal']})")
-        preview_stalls(stalls, limit=10)
-        return
+        preview_stalls(stalls, limit=limit)
+        return entry, stalls
 
-    # if exactly one to begin with
+    # exactly one match
     entry = matches[0]
     stalls = get_stalls_from_entry(entry)
     print(f"📍 {entry['hawker_centre']} ({entry['postal']})")
-    preview_stalls(stalls, limit=10)
+    preview_stalls(stalls, limit=limit)
+    return entry, stalls
+
+# for cli
+def main():
+    query = input("Enter postal code or hawker centre name: ").strip()
+    run_query_pipeline(query, limit=10)
+
 
 if __name__ == "__main__":
     main()
