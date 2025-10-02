@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import timedelta
+from typing import Optional
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.schemas.consumer_schema import ConsumerCreate, ConsumerOut
-from app.schemas.user_schema import UserLogin
+from app.schemas.consumer_schema import ConsumerCreate, ConsumerOut, Consumer_Token, UpdateProfileResponse
+from app.schemas.user_schema import UserLogin, PasswordResetRequest, PasswordResetData
 from app.controllers import consumer_controller
-from app.schemas.user_schema import PasswordResetRequest, PasswordResetData
+from app.utils.jwt_utils import create_access_token, ACCESS_TOKEN_EXPIRE_MINUTES
+from app.dependencies import get_current_user_id
 
 router = APIRouter(prefix="/consumer")
 
@@ -26,10 +29,10 @@ def signup_user(user_in: ConsumerCreate, db: Session = Depends(get_db)): # <-- U
         print(f"Error during sign up: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not create user.")
 
-@router.post("/login", response_model=ConsumerOut) # <-- Use ConsumerOut as response_model
+@router.post("/login", response_model=Consumer_Token, status_code=status.HTTP_200_OK)
 def login_user(user_in: UserLogin, db: Session = Depends(get_db)):
-    """Authenticates a user by email and password."""
-    # 1. Retrieve user by email using the service function
+    """Authenticates a user by email and password and returns a JWT."""
+    # 1. Retrieve user by email
     db_user = consumer_controller.get_user_by_email(db, user_in.email) 
 
     if not db_user:
@@ -52,8 +55,26 @@ def login_user(user_in: UserLogin, db: Session = Depends(get_db)):
             detail="Incorrect email or password"
         )
     
-    # 4. Success: return the user data
-    return db_user
+    # 4. JWT Creation
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    
+    # Create the token payload with essential user info
+    access_token = create_access_token(
+        data={
+            "user_id": db_user.id, 
+            "email": db_user.email, 
+            "type": db_user.user_type
+        },
+        expires_delta=access_token_expires
+    )
+    
+    # 5. Success: Return the Token object
+    # FastAPI automatically serializes db_user into Consumer thanks to `response_model=Consumer_Token` and `Consumer_Token.user: ConsumerOut`.
+    return {
+        "access_token": access_token, 
+        "token_type": "bearer",
+        "user": db_user
+    }
 
 @router.post("/forgot-password", status_code=200)
 def request_password_reset(
@@ -90,4 +111,38 @@ def reset_user_password(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred during password reset."
+        )
+
+@router.put("/update-profile", response_model=UpdateProfileResponse, status_code=status.HTTP_200_OK)
+async def update_profile(
+    db: Session = Depends(get_db),
+    # Inject user_id securely from the JWT token
+    user_id: int = Depends(get_current_user_id), 
+    
+    # Form() is used for text fields
+    username: Optional[str] = Form(None),
+    password: Optional[str] = Form(None),
+    
+    # File() is used for the file upload
+    profile_pic: Optional[UploadFile] = File(None),
+):
+    """Updates consumer profile details using JWT authentication."""
+    try:
+        updated_data = await consumer_controller.update_consumer_profile(
+            db,
+            user_id, 
+            username,
+            password,
+            profile_pic
+        )
+        return updated_data
+        
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        # Generic error handling
+        print(f"Update profile error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error: Failed to update profile."
         )

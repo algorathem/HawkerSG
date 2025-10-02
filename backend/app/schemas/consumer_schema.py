@@ -1,7 +1,6 @@
 from pydantic import BaseModel, EmailStr, field_validator
 from typing import Literal, Optional, List
 from datetime import datetime
-from app.models.consumer_model import Consumer
 
 # Consumer-specific Input Schema
 class ConsumerCreate(BaseModel):
@@ -32,3 +31,13 @@ class ConsumerOut(BaseModel):
             # Split the string by the pipe symbol (|)
             return v.split('|')
         return [] # Return an empty list if the string is empty or None
+
+# --- JWT Output Schema ---
+class Consumer_Token(BaseModel):
+    access_token: str
+    token_type: str
+    user: ConsumerOut
+
+class UpdateProfileResponse(BaseModel):
+    message: str
+    user: ConsumerOut # <--- Nest the ORM-enabled schema here

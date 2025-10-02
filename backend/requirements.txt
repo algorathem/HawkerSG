@@ -7,3 +7,5 @@ passlib
 argon2-cffi
 python-dotenv
 sendgrid
+python-jose[cryptography]
+python-multipart

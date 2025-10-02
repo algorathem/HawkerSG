@@ -1,130 +1,161 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 // Define the API base URL.
-const API_BASE_URL = 'http://localhost:8001'; 
+const API_BASE_URL = 'http://localhost:8001';
+
+// Define the storage keys
+const TOKEN_KEY = 'hawkersg_auth_token';
+const USER_KEY = 'hawkersg_user_data';
 
 export interface User {
-  id: number; 
-  email: string;
-  username: string; 
-  type: 'consumer' | 'business'; 
-  created_at?: string; 
-  
-  // --- ADDED FIELD ---
-  profile_pic?: string; // New optional field from ConsumerOut
-  // -------------------
+    id: number;
+    email: string;
+    username: string;
+    user_type: 'consumer' | 'business';
+    created_at?: string;
+    profile_pic?: string;
 }
 
 interface AuthContextType {
-  user: User | null;
-  login: (email: string, password: string, userType: 'consumer' | 'business') => Promise<void>;
-  signup: (name: string, email: string, password: string, userType: 'consumer' | 'business') => Promise<void>; 
-  logout: () => void;
-  forgotPassword: (email: string) => Promise<void>;
-  resetPassword: (token: string, password: string) => Promise<void>;
-  loading: boolean;
+    user: User | null;
+    loading: boolean;
+    authToken: string | null;
+    login: (email: string, password: string, user_type: 'consumer' | 'business') => Promise<void>;
+    signup: (name: string, email: string, password: string, userType: 'consumer' | 'business') => Promise<void>;
+    logout: () => void;
+    forgotPassword: (email: string) => Promise<void>;
+    resetPassword: (token: string, password: string) => Promise<void>;
+    updateProfile: (data: FormData) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+    // State initialization: Load from localStorage on startup
+    const [authToken, setAuthToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
 
-  useEffect(() => {
-    setLoading(false);
-  }, []);
+    const [user, setUser] = useState<User | null>(() => {
+        try {
+            const storedUser = localStorage.getItem('hawkersg_user_data');
+            console.log("AuthContext: Raw stored user data:", storedUser); // Log 1
+
+            if (!storedUser) {
+                console.log("AuthContext: No user data found in storage.");
+                return null;
+            }
+
+            const userData = JSON.parse(storedUser);
+            console.log("AuthContext: Parsed user data:", userData); // Log 2
+
+            if (userData && userData.type !== 'consumer') {
+                console.warn(`AuthContext: User is of type ${userData.type}, not consumer.`);
+            }
+
+            return userData;
+        } catch (e) {
+            console.error("AuthContext: FAILED to parse user data from storage.", e); // Log 3
+            return null;
+        }
+    });
+
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        setLoading(false);
+    }, []);
 
 
-  // --- LOGIN implementation (Mapping updated to include profile_pic) ---
-  const login = async (email: string, password: string, userType: 'consumer' | 'business') => {
-    setLoading(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/consumer/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          email, 
-          password,
-          user_type: userType, 
-        }),
-      });
-      
-      const data = await response.json();
+    // --- LOGIN ---
+    const login = async (email: string, password: string, user_type: 'consumer' | 'business'): Promise<void> => {
+        const url = `${API_BASE_URL}/consumer/login`;
 
-      if (!response.ok) {
-        const errorMessage = data.detail || 'Login failed.';
-        throw new Error(errorMessage);
-      }
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password, user_type }),
+            });
 
-      const loggedInUser: User = {
-        id: data.id,
-        email: data.email,
-        username: data.username,
-        type: data.user_type, 
-        created_at: data.created_at,
-        profile_pic: data.profile_pic, // <--- ADDED MAPPING
-      };
-      
-      setUser(loggedInUser);
-    } catch (error) {
-      console.error('Login error:', error);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
-  
-  // --- SIGNUP implementation (Mapping updated to include profile_pic) ---
-  const signup = async (name: string, email: string, password: string, userType: 'consumer' | 'business') => {
-    setLoading(true);
-    
-    try {
-      const response = await fetch(`${API_BASE_URL}/consumer/signup`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        // The payload now maps to the ConsumerCreate schema
-        body: JSON.stringify({ 
-          username: name, 
-          email,
-          password,
-          user_type: userType, 
-        }),
-      });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Login failed.');
+            }
 
-      const data = await response.json();
+            // Capture the token and nested user data from the response
+            const data = await response.json();
+            const { access_token, user: userData } = data;
 
-      if (!response.ok) {
-        const errorMessage = data.detail || 'Failed to create account via API.';
-        throw new Error(errorMessage);
-      }
+            // 1. Update token state and storage
+            setAuthToken(access_token);
+            localStorage.setItem(TOKEN_KEY, access_token);
 
-      // Data is a ConsumerOut object
-      const newUser: User = {
-        id: data.id,
-        email: data.email,
-        username: data.username,
-        type: data.user_type,
-        created_at: data.created_at,
-        profile_pic: data.profile_pic, // <--- ADDED MAPPING
-      };
+            // 2. Update user state and storage
+            setUser(userData);
+            localStorage.setItem(USER_KEY, JSON.stringify(userData));
 
-      setUser(newUser);
-      
-    } catch (error) {
-      console.error('Signup error:', error);
-      throw error;
-    } finally {
-      setLoading(false);
-    }
-  };
+        } catch (error) {
+            console.error('Login failed:', error);
+            throw error;
+        }
+    };
 
-  const logout = () => {
-    setUser(null);
-  };
- 
+
+    // --- SIGNUP ---
+    const signup = async (name: string, email: string, password: string, userType: 'consumer' | 'business') => {
+        setLoading(true);
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/consumer/signup`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                // The payload now maps to the ConsumerCreate schema
+                body: JSON.stringify({
+                    username: name,
+                    email,
+                    password,
+                    user_type: userType,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                const errorMessage = data.detail || 'Failed to create account via API.';
+                throw new Error(errorMessage);
+            }
+
+            // // Data is a ConsumerOut object
+            // const newUser: User = {
+            //     id: data.id,
+            //     email: data.email,
+            //     username: data.username,
+            //     user_type: data.user_type,
+            //     created_at: data.created_at,
+            //     profile_pic: data.profile_pic, // <--- ADDED MAPPING
+            // };
+
+            // setUser(newUser);
+
+        } catch (error) {
+            console.error('Signup error:', error);
+            throw error;
+        } finally {
+            setLoading(false);
+        }
+    };
+
+
+    const logout = () => {
+        // Clear both token and user data from state and storage
+        setAuthToken(null);
+        setUser(null);
+        localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(USER_KEY);
+    };
+
+
     const forgotPassword = async (email: string) => {
         try {
             const response = await fetch(`${API_BASE_URL}/consumer/forgot-password`, {
@@ -153,9 +184,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+
     const resetPassword = async (token: string, password: string): Promise<void> => {
         const url = `${API_BASE_URL}/consumer/reset-password`;
-        
+
         try {
             const response = await fetch(url, {
                 method: 'POST',
@@ -177,17 +209,77 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
-  return (
-    <AuthContext.Provider value={{ user, login, signup, logout, loading, forgotPassword, resetPassword }}>
-      {children}
-    </AuthContext.Provider>
-  );
+
+    const updateProfile = async (data: FormData): Promise<void> => {
+        // Check for token existence
+        if (!authToken) {
+            throw new Error('Authentication token is missing. Please log in.');
+        }
+
+        // Use the secured, JWT-protected endpoint
+        const url = `${API_BASE_URL}/consumer/update-profile`;
+
+        try {
+            const response = await fetch(url, {
+                method: 'PUT',
+                headers: {
+                    // JWT INTEGRATION
+                    'Authorization': `Bearer ${authToken}`,
+                    // NOTE: Do NOT set 'Content-Type' for FormData, let browser handle it
+                },
+                body: data, // Pass the FormData object directly
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                let errorMessage = 'Failed to update profile. Please try again.';
+
+                if (errorData.detail) {
+                    if (Array.isArray(errorData.detail)) {
+                        // Pydantic validation error list
+                        errorMessage = errorData.detail.map((err: { loc: string | any[]; msg: any; }) =>
+                            `${err.loc[err.loc.length - 1]}: ${err.msg}`
+                        ).join('; ');
+                    } else {
+                        // General error detail string
+                        errorMessage = errorData.detail;
+                    }
+                }
+
+                // The console will now show the actual Pydantic error (e.g., 'profile_pic: field required')
+                throw new Error(errorMessage);
+            }
+
+            // Process the response and update the user state
+            const responseData = await response.json();
+
+            // Expected response format: { message: "...", user: updated_user_data }
+            const updatedUser = responseData.user as User;
+
+            // Update state and local storage with the new user data
+            setUser(updatedUser);
+            localStorage.setItem(USER_KEY, JSON.stringify(updatedUser));
+
+            // OPTIONAL: Return a success message if needed by the component
+            // return responseData.message; 
+
+        } catch (error) {
+            console.error('Profile update failed:', error);
+            throw error;
+        }
+    };
+
+    return (
+        <AuthContext.Provider value={{ user, authToken, loading, login, signup, logout, forgotPassword, resetPassword, updateProfile }}>
+            {children}
+        </AuthContext.Provider>
+    );
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+    const context = useContext(AuthContext);
+    if (context === undefined) {
+        throw new Error('useAuth must be used within an AuthProvider');
+    }
+    return context;
 }

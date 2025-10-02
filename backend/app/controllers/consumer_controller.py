@@ -1,13 +1,20 @@
+import os
 from datetime import datetime
 from typing import Optional
-from fastapi import HTTPException
+from fastapi import UploadFile, HTTPException, status
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
-from app.utils.auth_utils import generate_reset_token, get_token_expiration, send_password_reset_email
+from app.utils.email_utils import generate_reset_token, get_token_expiration, send_password_reset_email
 from app.schemas.consumer_schema import ConsumerCreate
 from app.schemas.user_schema import PasswordResetRequest, PasswordResetData
 from app.models.consumer_model import Consumer
 from app.models.user_model import User as DBUser
+
+STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "assets", "profilePhotos")
+
+# Configuration for file validation
+MAX_FILE_SIZE_BYTES = 1 * 1024 * 1024  
+ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/webp"]
 
 # Define the password hashing context
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
@@ -127,3 +134,98 @@ def handle_password_reset(db: Session, data: PasswordResetData) -> None:
     user.token_expires = None
 
     db.commit()
+
+async def update_consumer_profile(
+    db: Session,
+    user_id: int, 
+    username: Optional[str],
+    password: Optional[str],
+    profile_pic: Optional[UploadFile],
+) -> dict:
+    """Updates the consumer's username, password, and/or profile picture."""
+    
+    user = db.query(DBUser).filter(DBUser.id == user_id).first()
+    if not user:
+        # This shouldn't happen if JWT is valid, but is a safe guard
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    consumer_data = {} # Used to track changes and build the response
+
+    # 1. Update Username
+    if username is not None and username.strip():
+        if len(username.strip()) < 1:
+             raise HTTPException(status_code=400, detail="Username must be at least 1 characters.")
+        user.username = username.strip()
+        consumer_data['username'] = user.username 
+
+    # 2. Update Password
+    if password:
+        if len(password) < 8:
+             raise HTTPException(status_code=400, detail="New password must be at least 8 characters.")
+        user.hashed_password = get_password_hash(password)
+        consumer_data['password_updated'] = True 
+
+    # 3. Handle Profile Picture Upload and Validation
+    if profile_pic and profile_pic.filename:
+        # FastAPI's UploadFile is an instance of Starlette's UploadFile
+        
+        # 3a. Check File Type (MIME Type)
+        if profile_pic.content_type not in ALLOWED_MIME_TYPES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid file type. Only JPEG, PNG, and WebP images are allowed."
+            )
+            
+        # 3b. Check File Size (Reading the first 1MB is needed to confirm size before full upload)        
+        # Read the entire file content into a byte buffer for size check
+        file_content = await profile_pic.read()
+        
+        if len(file_content) > MAX_FILE_SIZE_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File size exceeds the maximum limit of 1MB."
+            )
+
+        # 3c. Rewind the file pointer for saving
+        await profile_pic.seek(0)
+        
+        # 3d. Proceed with saving the file 
+        file_extension = profile_pic.filename.split('.')[-1]
+        new_filename = f"user_{user_id}_{int(datetime.now().timestamp())}.{file_extension}"
+        file_path = f"{STATIC_DIR}/{new_filename}"
+
+        os.makedirs(STATIC_DIR, exist_ok=True)
+        
+        try:
+            # Re-read the file content into the buffer (since it was consumed by the size check)
+            # Alternatively, if you did not use .read() above, you'd use shutil.copyfileobj directly.
+            # Since we used .read() above, we must use the content we already read.
+            with open(file_path, "wb") as buffer:
+                 buffer.write(file_content) # Write the pre-read content
+                 
+        except Exception as e:
+            db.rollback() 
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to save profile picture: {e}"
+            )
+
+        # Update the model
+        user.profile_pic = new_filename
+        consumer_data['profile_pic'] = new_filename
+        
+    # 4. Check for updates and commit
+    if not consumer_data:
+         raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No valid fields provided for update."
+        )
+
+    db.commit()
+    db.refresh(user)
+    
+    # Return the full updated user object (matches ConsumerOut schema structure)
+    return {
+        "message": "Profile updated successfully.",
+        "user": user # FastAPI will serialize this model object via the route's Pydantic schema
+    }

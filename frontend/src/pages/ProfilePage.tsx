@@ -1,24 +1,36 @@
-import React, { useState } from 'react';
-import { Heart, Clock, Star, Search, MapPin } from 'lucide-react';
+import { useState } from 'react';
+import { Heart, Clock, Star, Search, Pencil } from 'lucide-react';
 // 🛑 CRITICAL FIX 1: Import Link from react-router-dom for internal navigation
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useData } from '../contexts/DataContext';
 import StallCard from '../components/StallCard';
-import HawkerCenterCard from '../components/HawkerCenterCard';
+// import HawkerCenterCard from '../components/HawkerCenterCard';
+import EditProfileModal from '../components/EditProfileModal';
 
 const PROFILE_PIC_BASE_URL = 'http://localhost:8001/static/profiles/';
 
 export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<'favorites' | 'recent' | 'history'>('favorites');
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const { user } = useAuth();
-  const { stalls, hawkerCenters, favorites, searchHistory, recentlyVisited } = useData();
+  const { stalls, /*hawkerCenters, */ favorites, searchHistory, recentlyVisited } = useData();
 
   const favoriteStalls = stalls.filter(stall => favorites.includes(stall.id));
   const recentStalls = stalls.filter(stall => recentlyVisited.includes(stall.id))
     .sort((a, b) => recentlyVisited.indexOf(a.id) - recentlyVisited.indexOf(b.id));
 
-  if (!user || user.type !== 'consumer') {
+  // console.log("Current user object for profile page:", user); // Log 4
+
+  if (!user) {
+    console.log("ProfilePage: Access Denied because user is NULL.");
+    // If this logs, the issue is failure to retrieve/parse user data.
+  } else if (user.user_type !== 'consumer') {
+    console.log(`ProfilePage: Access Denied because user.type is ${user.user_type}.`);
+    // If this logs, the issue is an incorrect value in the local storage.
+  }
+
+  if (!user || user.user_type !== 'consumer') {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
         <h1 className="text-2xl font-bold text-gray-900">Access Denied</h1>
@@ -49,11 +61,22 @@ export default function ProfilePage() {
               </div>
             )}
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{user.username}</h1> {/* Use username */}
+          <div className="flex-grow">
+            <h1 className="text-2xl font-bold text-gray-900">{user.username}</h1>
             <p className="text-gray-600">{user.email}</p>
-            {/* Assuming user has a 'createdAt' field from sign up */}
-            <p className="text-sm text-gray-500">Member since {new Date(user.created_at).toLocaleDateString()}</p>
+
+            <div className="flex justify-between items-center mt-1">
+              <p className="text-sm text-gray-500">
+                Member since {new Date(user.created_at).toLocaleDateString()}
+              </p>
+
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="flex items-center space-x-1 text-sm font-medium text-red-600 hover:text-red-700 transition-colors border border-red-600 px-3 py-2 rounded-lg">
+                <Pencil className="w-4 h-4" />
+                <span>Edit Profile</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -83,31 +106,28 @@ export default function ProfilePage() {
       <div className="flex space-x-1 mb-6 bg-gray-200 rounded-lg p-1 max-w-lg">
         <button
           onClick={() => setActiveTab('favorites')}
-          className={`flex-1 py-2 px-4 rounded-md font-medium transition-colors ${
-            activeTab === 'favorites'
+          className={`flex-1 py-2 px-4 rounded-md font-medium transition-colors ${activeTab === 'favorites'
               ? 'bg-white text-red-600 shadow-sm'
               : 'text-gray-600 hover:text-gray-900'
-          }`}
+            }`}
         >
           Favorites ({favorites.length})
         </button>
         <button
           onClick={() => setActiveTab('recent')}
-          className={`flex-1 py-2 px-4 rounded-md font-medium transition-colors ${
-            activeTab === 'recent'
+          className={`flex-1 py-2 px-4 rounded-md font-medium transition-colors ${activeTab === 'recent'
               ? 'bg-white text-red-600 shadow-sm'
               : 'text-gray-600 hover:text-gray-900'
-          }`}
+            }`}
         >
           Recent ({recentlyVisited.length})
         </button>
         <button
           onClick={() => setActiveTab('history')}
-          className={`flex-1 py-2 px-4 rounded-md font-medium transition-colors ${
-            activeTab === 'history'
+          className={`flex-1 py-2 px-4 rounded-md font-medium transition-colors ${activeTab === 'history'
               ? 'bg-white text-red-600 shadow-sm'
               : 'text-gray-600 hover:text-gray-900'
-          }`}
+            }`}
         >
           Search ({searchHistory.length})
         </button>
@@ -201,6 +221,14 @@ export default function ProfilePage() {
           )}
         </div>
       )}
+
+      {/* 🛑 RENDER EDIT PROFILE MODAL 🛑 */}
+      <EditProfileModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        currentUser={user}
+      />
+      {/* 🛑 END MODAL 🛑 */}
     </div>
   );
 }
