@@ -18,7 +18,7 @@ class ConsumerOut(BaseModel):
     user_type: Literal['consumer']
     created_at: Optional[datetime] = None
     profile_pic: Optional[str] = None
-    recentlySearch: List[str] 
+    recentlySearch: List[str]
 
     class Config:
         from_attributes = True

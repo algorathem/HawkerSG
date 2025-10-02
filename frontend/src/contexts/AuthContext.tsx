@@ -20,6 +20,8 @@ interface AuthContextType {
   login: (email: string, password: string, userType: 'consumer' | 'business') => Promise<void>;
   signup: (name: string, email: string, password: string, userType: 'consumer' | 'business') => Promise<void>; 
   logout: () => void;
+  forgotPassword: (email: string) => Promise<void>;
+  resetPassword: (token: string, password: string) => Promise<void>;
   loading: boolean;
 }
 
@@ -122,9 +124,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = () => {
     setUser(null);
   };
+ 
+    const forgotPassword = async (email: string) => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/consumer/forgot-password`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ email }), // Send only the email to the backend
+            });
+
+            // CRITICAL SECURITY POINT:
+            // We treat both 200/204 (Success) and potentially 404 (Not Found) as a success
+            // on the frontend to display the neutral message and prevent email enumeration.
+            // Only throw an error for severe issues (5xx server error, network failure).
+            if (response.status >= 500) {
+                throw new Error('Server error during password reset request.');
+            }
+
+            // If the status is < 500, we proceed as if the email was sent, 
+            // relying on the backend to handle the security check internally.
+
+        } catch (error) {
+            console.error('Password reset request failed:', error);
+            // Re-throw to be caught by the ForgotPasswordPage component
+            throw new Error('Failed to connect to the reset service.');
+        }
+    };
+
+    const resetPassword = async (token: string, password: string): Promise<void> => {
+        const url = `${API_BASE_URL}/consumer/reset-password`;
+        
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ token, new_password: password }),
+            });
+
+            if (!response.ok) {
+                // Read error details from the backend response
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'Password reset failed.');
+            }
+
+        } catch (error) {
+            console.error('Password reset failed:', error);
+            throw error;
+        }
+    };
 
   return (
-    <AuthContext.Provider value={{ user, login, signup, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, signup, logout, loading, forgotPassword, resetPassword }}>
       {children}
     </AuthContext.Provider>
   );

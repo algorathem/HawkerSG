@@ -4,6 +4,7 @@ from app.database import get_db
 from app.schemas.consumer_schema import ConsumerCreate, ConsumerOut
 from app.schemas.user_schema import UserLogin
 from app.controllers import consumer_controller
+from app.schemas.user_schema import PasswordResetRequest, PasswordResetData
 
 router = APIRouter(prefix="/consumer")
 
@@ -53,3 +54,40 @@ def login_user(user_in: UserLogin, db: Session = Depends(get_db)):
     
     # 4. Success: return the user data
     return db_user
+
+@router.post("/forgot-password", status_code=200)
+def request_password_reset(
+    request: PasswordResetRequest, 
+    db: Session = Depends(get_db)
+):
+    """
+    Initiates the password reset flow.
+    Returns a success status regardless of whether the email is registered
+    (for security).
+    """
+    # The controller handles the lookup, token generation, and email sending
+    consumer_controller.handle_password_reset_request(db, request)
+    
+    # Return a generic success response to implement the security best practice
+    return {"message": "If the email is registered, a password reset link has been sent."}
+
+@router.post("/reset-password", status_code=status.HTTP_200_OK)
+def reset_user_password(
+    data: PasswordResetData, 
+    db: Session = Depends(get_db)
+):
+    """
+    Finalizes the password reset by validating the token and setting the new password.
+    """
+    try:
+        consumer_controller.handle_password_reset(db, data)
+        return {"message": "Password successfully reset."}
+    except HTTPException as e:
+        # Re-raise explicit exceptions from the controller
+        raise e
+    except Exception:
+        # Catch unexpected errors
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred during password reset."
+        )

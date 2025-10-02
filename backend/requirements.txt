@@ -5,3 +5,5 @@ pydantic
 email-validator
 passlib
 argon2-cffi
+python-dotenv
+sendgrid

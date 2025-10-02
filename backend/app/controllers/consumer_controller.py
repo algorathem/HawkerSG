@@ -1,9 +1,13 @@
+from datetime import datetime
+from typing import Optional
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
+from app.utils.auth_utils import generate_reset_token, get_token_expiration, send_password_reset_email
 from app.schemas.consumer_schema import ConsumerCreate
+from app.schemas.user_schema import PasswordResetRequest, PasswordResetData
 from app.models.consumer_model import Consumer
 from app.models.user_model import User as DBUser
-from typing import Optional
 
 # Define the password hashing context
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
@@ -63,3 +67,63 @@ def add_recent_search(db: Session, consumer_id: int, new_term: str):
     db.commit()
     db.refresh(consumer)
     return consumer
+
+def handle_password_reset_request(db: Session, request: PasswordResetRequest) -> bool:
+    email = request.email
+    user = db.query(DBUser).filter(DBUser.email == email).first()
+    
+    if user:
+        # 1. Generate token and expiration
+        token = generate_reset_token()
+        token_expires = get_token_expiration()
+
+        # 2. SAVE the token and expiry time to the database
+        user.reset_token = token
+        user.token_expires = token_expires
+        
+        db.commit() 
+        db.refresh(user)
+
+        # 3. Send the email
+        send_password_reset_email(email, token, user.username) 
+        
+    # Always return True for security reasons
+    return True
+
+def handle_password_reset(db: Session, data: PasswordResetData) -> None:
+    """
+    Verifies the token, checks expiration, and updates the user's password.
+    """
+    user = db.query(DBUser).filter(DBUser.reset_token == data.token).first()
+
+    # 1. Token Existence Check
+    if not user:
+        raise HTTPException(
+            status_code=400, 
+            detail="Invalid or missing token. Password reset failed."
+        )
+
+    # 2. Token Expiration Check
+    if user.token_expires is None or user.token_expires < datetime.now():
+        # Clear the token after failure for security
+        user.reset_token = None
+        user.token_expires = None
+        db.commit()
+        raise HTTPException(
+            status_code=400, 
+            detail="Password reset token has expired. Please request a new one."
+        )
+
+    # 3. Hash and Update Password
+    try:
+        hashed_password = pwd_context.hash(data.new_password)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to hash password: {e}")
+
+    user.hashed_password = hashed_password
+    
+    # 4. Invalidate the token after successful use
+    user.reset_token = None
+    user.token_expires = None
+
+    db.commit()

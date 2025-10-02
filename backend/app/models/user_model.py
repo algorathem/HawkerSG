@@ -10,6 +10,8 @@ class User(Base):
     hashed_password = Column(String)
     username = Column(String)
     user_type = Column(String) # Discriminator column
+    reset_token = Column(String, nullable=True)
+    token_expires = Column(DateTime, nullable=True)
     created_at = Column(
         DateTime,
         nullable=False,
