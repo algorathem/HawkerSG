@@ -7,6 +7,8 @@ import { useData } from '../contexts/DataContext';
 import StallCard from '../components/StallCard';
 import HawkerCenterCard from '../components/HawkerCenterCard';
 
+const PROFILE_PIC_BASE_URL = 'http://localhost:8001/static/profiles/';
+
 export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<'favorites' | 'recent' | 'history'>('favorites');
   const { user } = useAuth();
@@ -30,10 +32,22 @@ export default function ProfilePage() {
       {/* Profile Header */}
       <div className="bg-white rounded-xl shadow-sm p-6 mb-8">
         <div className="flex items-center space-x-4">
-          <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center">
-            <span className="text-xl font-bold text-red-600">
-              {user.username.charAt(0).toUpperCase()} {/* Use username if 'name' isn't available */}
-            </span>
+          <div className="w-16 h-16 rounded-full overflow-hidden flex-shrink-0">
+            {user.profile_pic ? (
+              // Option 1: Display the image if the URL exists
+              <img
+                src={`${PROFILE_PIC_BASE_URL}${user.profile_pic}`}
+                alt={`${user.username}'s profile`}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              // Option 2: Fallback to the initial avatar if no picture URL is present
+              <div className="w-full h-full bg-red-100 flex items-center justify-center">
+                <span className="text-xl font-bold text-red-600">
+                  {user.username.charAt(0).toUpperCase()}
+                </span>
+              </div>
+            )}
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">{user.username}</h1> {/* Use username */}

@@ -41,3 +41,25 @@ def create_user(db: Session, user: ConsumerCreate) -> Consumer:
     db.commit()
     db.refresh(db_user) 
     return db_user
+
+def add_recent_search(db: Session, consumer_id: int, new_term: str):
+    consumer = db.query(Consumer).filter(Consumer.id == consumer_id).first()
+    if not consumer:
+        return None
+
+    # 1. Deserialize: Split the current string into a list
+    current_list = consumer.recentlySearch.split('|') if consumer.recentlySearch else []
+    
+    # Remove duplicates and put the newest term at the front
+    current_list = [term for term in current_list if term != new_term]
+    current_list.insert(0, new_term)
+
+    # Limit the list size (e.g., last 5 searches)
+    current_list = current_list[:5]
+
+    # 2. Serialize: Join the list back into a string using '|'
+    consumer.recentlySearch = '|'.join(current_list)
+    
+    db.commit()
+    db.refresh(consumer)
+    return consumer
