@@ -6,6 +6,7 @@ from app.database import Base, engine # Base and engine
 from app.routes.consumer_route import router as consumer_router # Import the consumer router
 from app.routes.business_route import router as business_router # Import the business router
 from app.routes.favourite_route import router as favourite_router  
+from app.routes.review_route import router as review_router
 
 # Import models here so Base knows about them when calling create_all
 from app.models import (
@@ -51,6 +52,7 @@ app.add_middleware(
 app.include_router(consumer_router)
 app.include_router(business_router)
 app.include_router(favourite_router)
+app.include_router(review_router)
 
 # Optional: Root route
 @app.get("/")
